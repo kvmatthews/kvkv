@@ -2,37 +2,35 @@ import React, { useState } from "react";
 import axios from "axios";
 
 const Classification_Page = () => {
-    const [file, setFile] = useState(null);
-    const [prediction, setPrediction] = useState("");
-    const [confidence, setConfidence] = useState("");
-    const [imageURL, setImageURL] = useState("");
+    const [files, setFiles] = useState([]);
+    const [results, setResults] = useState([]);
 
     const handleFileChange = (event) => {
-        setFile(event.target.files[0]);
+        const selectedFiles = Array.from(event.target.files);
+        setFiles(selectedFiles);
     };
 
     const handleSubmit = async () => {
-        if (!file) {
-            alert("Please select an image file first.");
+        if (files.length === 0) {
+            alert("Please select image files first.");
             return;
         }
 
         const formData = new FormData();
-        formData.append("file", file);
+        files.forEach((file, index) => {
+            formData.append("files[]", file);
+        });
 
         try {
-            const response = await axios.post("http://192.168.1.8:5000/predict", formData, {
+            const response = await axios.post("http://127.0.0.1:5000/predict", formData, {
                 headers: {
                     "Content-Type": "multipart/form-data",
                 },
             });
 
-            const { prediction, confidence, image_url } = response.data;
-            setPrediction(prediction);
-            setConfidence(confidence);
-            setImageURL(image_url);
+            setResults(response.data);
         } catch (error) {
-            console.error("Error uploading the file:", error);
+            console.error("Error uploading the files:", error);
         }
     };
 
@@ -46,15 +44,19 @@ const Classification_Page = () => {
             <div className="image_classification">
                 <div className="file_image">
                     <label>
-                        <input type="file" onChange={handleFileChange} />
+                        <input type="file" accept="image/png, image/jpeg" multiple onChange={handleFileChange} />
                     </label>
                 </div>
                 <button className="submit_image_button" onClick={handleSubmit}>
                     Submit
                 </button>
-                <span>Nama Dosen: {prediction}</span>
-                <span>Akurasi: {confidence}</span>
-                {imageURL && <img src={`http://127.0.0.1:5000/${imageURL}`} alt="Uploaded" />}
+                {results.map((result, index) => (
+                    <div key={index}>
+                        <span>Nama Dosen: {result.prediction}</span>
+                        <span>Akurasi: {result.confidence}</span>
+                        {result.image_url && <img src={`http://127.0.0.1:5000/${result.image_url}`} alt="Uploaded" />}
+                    </div>
+                ))}
             </div>
         </>
     );

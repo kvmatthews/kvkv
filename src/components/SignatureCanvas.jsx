@@ -3,31 +3,39 @@ import SignaturePad from "react-signature-canvas";
 import axios from "axios";
 
 function SignatureCanvas() {
-  const [imageURL, setImageURL] = useState(null);
+  const [imageURLs, setImageURLs] = useState([]);
+  const [results, setResults] = useState([]);
   const sigCanvas = useRef(null);
-  const [result, setResult] = useState(null);
 
   const clearCanvas = () => {
     sigCanvas.current.clear();
-    setImageURL(null);
-    setResult(null);
   };
 
   const saveCanvas = () => {
-    setImageURL(sigCanvas.current.getTrimmedCanvas().toDataURL("image/png"));
+    const imageURL = sigCanvas.current.getTrimmedCanvas().toDataURL("image/png");
+    setImageURLs([...imageURLs, imageURL]);
+    clearCanvas(); // Clear the canvas after saving the image
+  };
+
+  const convertToBlob = async (imageURL) => {
+    const base64Response = await fetch(imageURL);
+    const blob = await base64Response.blob();
+    return blob;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!imageURL) return;
+    if (!imageURLs.length) {
+      alert("Please draw an image before submitting.");
+      return;
+    }
 
     try {
-      // Convert base64 to a blob
-      const base64Response = await fetch(imageURL);
-      const blob = await base64Response.blob();
-
       const formData = new FormData();
-      formData.append("file", blob, "signature.png");
+      for (let i = 0; i < imageURLs.length; i++) {
+        const blob = await convertToBlob(imageURLs[i]);
+        formData.append("files[]", blob, `signature_${i}.png`);
+      }
 
       const response = await axios.post(
         "http://192.168.1.8:5000/predict",
@@ -39,9 +47,16 @@ function SignatureCanvas() {
         }
       );
       console.log(response.data);
-      setResult(response.data);
+
+      // Combine the original images with their corresponding results
+      const combinedResults = imageURLs.map((url, index) => ({
+        url,
+        ...response.data[index],
+      }));
+      setResults(combinedResults);
     } catch (error) {
       console.error("Error submitting the signature:", error);
+      alert("There was an error submitting your images. Please try again.");
     }
   };
 
@@ -52,8 +67,7 @@ function SignatureCanvas() {
         <SignaturePad
           ref={sigCanvas}
           canvasProps={{
-            className:
-              "signatureCanvas w-full h-48 border border-gray-300 rounded",
+            className: "signatureCanvas w-full h-48 border border-gray-300 rounded",
           }}
         />
         <div className="flex justify-around mt-4">
@@ -71,29 +85,41 @@ function SignatureCanvas() {
           </button>
         </div>
       </div>
-      {imageURL && (
-        <>
-          <div className="mt-4">
-            <img
-              src={imageURL}
-              alt="My Signature"
-              className="block mx-auto border border-gray-300 rounded"
-              style={{ width: "150px" }}
-            />
-          </div>
-          <button
-            onClick={handleSubmit}
-            className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 mt-4"
-          >
-            Submit
-          </button>
-        </>
+      <div className="flex flex-wrap">
+        {imageURLs.map((url, index) => (
+          <img
+            key={index}
+            src={url}
+            alt={`signature_${index}`}
+            className="block mx-2 my-2 border border-gray-300 rounded"
+            style={{ width: "150px" }}
+          />
+        ))}
+      </div>
+      {imageURLs.length > 0 && (
+        <button
+          onClick={handleSubmit}
+          className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 mt-4"
+        >
+          Submit
+        </button>
       )}
-      {result && (
-        <div>
-          <h5>Hasil</h5>
-          <p>{result.confidence}</p>
-          <p>{result.prediction}</p>
+      {results.length > 0 && (
+        <div className="mt-4">
+          <h5 className="text-xl font-bold">Prediction Results</h5>
+          {results.map((res, index) => (
+            <div key={index} className="mb-4">
+              <img
+                src={res.url}
+                alt={`result_${index}`}
+                className="block mx-auto border border-gray-300 rounded"
+                style={{ width: "150px" }}
+              />
+              <p><strong>Image:</strong> {res.filename}</p>
+              <p><strong>Prediction:</strong> {res.prediction}</p>
+              <p><strong>Confidence:</strong> {res.confidence}</p>
+            </div>
+          ))}
         </div>
       )}
     </div>
